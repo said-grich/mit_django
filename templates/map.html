@@ -31,6 +31,7 @@
     <script src="https://stuartmatthews.github.io/leaflet-geotiff/vendor/plotty.js"></script>
     <script src="https://stuartmatthews.github.io/leaflet-geotiff/vendor/geotiff.js"></script>
     <script src="https://kit.fontawesome.com/eb49c8d87e.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
 
@@ -41,7 +42,7 @@
           <div class="container-fluid justify-content-between">
             <div class="navbar-nav row justify-content-center align-items-center">   
                 <button id="fileButton" class="btn col-4" style="height: 45px;"><i class="fa-solid fa-file"></i></button>
-                <button class="btn col-4"><i class="fa-solid fa-chart-simple"></i></button>
+                <button id="openChart" class="btn col-4"><i class="fa-solid fa-chart-simple"></i></button>
                 <button class="btn col-4"><i class="fa-solid fa-file-import"></i></button>
             
             </div>
@@ -59,15 +60,47 @@
         </button>
       </div>
       <div class="modal-body">
-        <select id="fileSelect" class="form-control"></select>
+        <div class="form-group">
+          <label for="productSelect">Select Product:</label>
+          <select id="productSelect" class="form-control">
+            <option value="lst">Land Surface Temperature</option>
+            <option value="sm">Soil Moisture</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="startDatePicker">Start Date:</label>
+          <input type="date" class="form-control" id="startDatePicker">
+        </div>
+        <div class="form-group">
+          <label for="endDatePicker">End Date:</label>
+          <input type="date" class="form-control" id="endDatePicker">
+        </div>
       </div>
       <div class="modal-footer">
         <button id="closeButton" type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-        <button  type="button" class="btn btn-primary" id="selectFileBtn">Select</button>
+        <button type="button" class="btn btn-primary" id="selectFileBtn">Select</button>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Modal -->
+<div class="modal fade" id="chartModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="exampleModalLabel">Chart</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+              </button>
+          </div>
+          <div class="modal-body">
+              <canvas id="chart"></canvas>
+          </div>
+      </div>
+  </div>
+</div>
+
 
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js"></script>

@@ -53,15 +53,17 @@ const Model = {
     });
   },
   
-  selectValueOfPolygon(layer, polygonData, geotiffFile) {
+  selectValueOfPolygon(layer, polygon, selectedProduct ,selectedStartDate,selectedEndDate) {
     return new Promise((resolve, reject) => {
       // Convert the polygon data to a JSON string
-      const polygonJSON = JSON.stringify(polygonData);
+      const polygonJSON = JSON.stringify(polygon);
 
       // Create a FormData object to send the data as multipart/form-data
       const formData = new FormData();
       formData.append("polygon", polygonJSON);
-      formData.append("geotiff", geotiffFile);
+      formData.append("product", selectedProduct);
+      formData.append("start_date", selectedStartDate);
+      formData.append("end_date", selectedEndDate);
 
       // Send the AJAX request to the backend
       $.ajax({
@@ -72,19 +74,22 @@ const Model = {
         contentType: false,
         success: function (response) {
           layer.bindPopup(
-            "<h4>Date: " +
-              response.date +
-              "</h4>" +
+            "<h6>Date: From" +
+            selectedStartDate + " To "+ selectedEndDate+
+              "</h6>" +
               "<p>Mean Value: " +
-              response.mean_value +
+              response.mean +
               "</p>" +
               "<p>Minimum Value: " +
-              response.min_value +
+              response.min +
               "</p>" +
               "<p>Maximum Value: " +
-              response.max_value +
+              response.max +
               "</p>"
           );
+
+          resolve(response);
+
         },
         error: function (error) {
           console.log("Error:", error);
@@ -157,7 +162,7 @@ const Model = {
 
 // View
 const View = {
-  visualizeGeotiff(geotiffPath, map,min ,max) {
+  visualizeGeotiff(geotiffPath, map, min, max) {
     var geotiffLayer = L.leafletGeotiff("static/lst/" + geotiffPath, {
       band: 0,
       name: "LST",
@@ -172,7 +177,6 @@ const View = {
       }),
     }).addTo(map);
 
-
     if (this.legend) {
       this.legend.remove();
     }
@@ -181,23 +185,28 @@ const View = {
     this.legend.addTo(map);
   },
 
-  openModal(data) {
-    var selectOptions = "";
-
-    for (var i = 0; i < data.length; i++) {
-      var path = data[i].path;
-      var date = data[i].date;
-      selectOptions += '<option value="' + path + '">' + path + "</option>";
-    }
-
-    $("#fileSelect").html(selectOptions);
+  openModal() {
     $("#myModal").modal("show");
   },
+
   closeModal() {
     $("#myModal").modal("hide");
   },
-  getSelectedFile() {
-    return $("#fileSelect").val();
+  openChartModal() {
+    $("#chartModal").modal("show");
+  },
+
+  closeChartModal() {
+    $("#chartModal").modal("hide");
+  },
+  getSelectedProduct() {
+    return $("#productSelect").val();
+  },
+  getSelectedStartDate() {
+    return $("#startDatePicker").val();
+  },
+  getSelectedEndDate() {
+    return $("#endDatePicker").val();
   },
 
   bindFileButtonEvent(handler) {
@@ -211,6 +220,57 @@ const View = {
   bindSelectButton(handler) {
     $("#selectFileBtn").on("click", handler);
   },
+  bindChartButton(handler) {
+    $("#openChart").on("click", handler);
+  },
+  visualizeBase64ImageOnMap(base64Image, map, polygon) {
+    const image = new Image();
+    image.src = base64Image;
+  
+    image.onload = function () {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+  
+      const context = canvas.getContext('2d');
+      context.clearRect(0, 0, canvas.width, canvas.height);  // Clear the canvas first
+      context.drawImage(image, 0, 0, image.width, image.height);
+  
+      const imageOverlay = L.imageOverlay(canvas.toDataURL(), polygon,{
+        opacity: 0.9,
+    }).addTo(map);
+
+    map.flyToBounds(polygon, {
+      duration: 1,  // Animation duration in seconds
+    });
+  }
+},
+
+  desplayChart(resault){
+      // Extract data and labels from the response
+  const data = resault.map(item => item[0]);
+  const labels = resault.map(item => item[1]);
+
+  // Create a chart using Chart.js
+  const ctx = document.getElementById('chart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Mean Values',
+        data: data,
+        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+        borderColor: 'rgba(75, 192, 192, 1)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
+  }
 };
 
 // Controller
@@ -219,7 +279,12 @@ const Controller = {
 
 
   init() {
-    
+
+    var selectedProduct ;
+    var selectedStartDate ;
+    var selectedEndDate ;
+    var resault ;
+    var base64 ;
     const map = L.map("map", {
       minZoom: 0,
       maxZoom: 20,
@@ -257,42 +322,75 @@ const Controller = {
     map.addControl(drawControl);
 
     View.bindSelectButton(() => {
-      var selectedGeotiff = View.getSelectedFile();
-      map.on("draw:created", function (e) {
-        var layer = e.layer;
-        drawnItems.addLayer(layer);
-        const shape = e.layerType;
+       selectedProduct = View.getSelectedProduct();
+       selectedStartDate = View.getSelectedStartDate();
+       selectedEndDate = View.getSelectedEndDate();
 
-        if (shape === "marker") {
-          // Retrieve the coordinates of the selected point
-          var latLng = layer.getLatLng();
-          var lat = latLng.lat;
-          var lng = latLng.lng;
-
-          // Update the popup content with data from the backend
-          Model.selectValueOfPoint(layer, lat, lng, selectedGeotiff);
-        } else if (shape === "polygon") {
-          var polygon = layer.getLatLngs()[0];
-
-          Model.selectValueOfPolygon(layer, polygon, selectedGeotiff);
-        } else if (shape === "rectangle") {
-          const bounds = layer.getBounds();
-          // Create a Polygon from the rectangle bounds
-          const polygon = L.polygon([
-            bounds.getSouthWest(),
-            bounds.getNorthWest(),
-            bounds.getNorthEast(),
-            bounds.getSouthEast(),
-          ]);
-
-          // Access the coordinates of the polygon
-          const coordinates = polygon.getLatLngs();
-
-          // Log the coordinates
-          Model.selectValueOfPolygon(layer, coordinates[0], selectedGeotiff);        }
-      });
-
+       console.log(selectedStartDate,selectedEndDate)
+       View.closeModal()
     });
+    map.on("draw:created", function (e) {
+      var layer = e.layer;
+      drawnItems.addLayer(layer);
+      const shape = e.layerType;
+
+      if (shape === "marker") {
+        // Retrieve the coordinates of the selected point
+        var latLng = layer.getLatLng();
+        var lat = latLng.lat;
+        var lng = latLng.lng;
+
+        // Update the popup content with data from the backend
+        Model.selectValueOfPoint(layer, lat, lng, selectedProduct);
+      } else if (shape === "polygon") {
+
+        var polygon = layer.getLatLngs();
+        Model.selectValueOfPolygon(layer, polygon[0], selectedProduct ,selectedStartDate,selectedEndDate).then((response) => {
+          // Handle the data
+
+          resault=response.data
+          base64=response.base64
+          View.visualizeBase64ImageOnMap(base64,map,polygon)
+          console.log("Received Data:", response);
+          // ... Other processing with the data
+        })
+        .catch((error) => {
+          // Handle errors
+          console.log("Error:", error);
+        });
+        console.log(resault)
+
+      } else if (shape === "rectangle") {
+        const bounds = layer.getBounds();
+        // Create a Polygon from the rectangle bounds
+        const polygon = L.polygon([
+          bounds.getSouthWest(),
+          bounds.getNorthWest(),
+          bounds.getNorthEast(),
+          bounds.getSouthEast(),
+        ]);
+
+        // Access the coordinates of the polygon
+        const coordinates = polygon.getLatLngs();
+        Model.selectValueOfPolygon(layer, coordinates[0], selectedProduct ,selectedStartDate,selectedEndDate).then((response) => {
+          // Handle the data
+
+          resault=response.data
+          base64=response.base64
+          View.visualizeBase64ImageOnMap(base64,map,coordinates)
+          // ... Other processing with the data
+        })
+        .catch((error) => {
+          // Handle errors
+          console.log("Error:", error);
+        });
+        console.log(resault)
+
+        // Log the coordinates
+       }
+    });
+
+
 
     View.bindFileButtonEvent(() => {
       Model.getDataFromServer()
@@ -304,19 +402,28 @@ const Controller = {
         });
     });
 
+    View.bindChartButton(() => {
+      View.desplayChart(resault)
+      View.openChartModal()
+    });
+
+
+
+
     View.bindCloseButtonEvent(() => {
+
       View.closeModal();
     });
 
-    View.bindSelectButton(() => {
-      var selectedGeotiff = View.getSelectedFile();
-      Model.getMaxMin(selectedGeotiff)
-      .then((data)=>{
-        View.visualizeGeotiff(selectedGeotiff, map , data["min_value"],data["max_value"]);
-        View.closeModal();
-      })
+    // View.bindSelectButton(() => {
+    //   var selectedProduct = View.getSelectedProduct();
+    //   Model.getMaxMin(selectedProduct)
+    //   .then((data)=>{
+    //     View.visualizeGeotiff(selectedGeotiff, map , data["min_value"],data["max_value"]);
+    //     View.closeModal();
+    //   })
  
-    });
+    // });
   },
 };
 
